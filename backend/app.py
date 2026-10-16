@@ -116,6 +116,212 @@ def predict_webcam():
 
 
 # ==========================================
+# 4. Multi-Digit Predict Endpoint
+# ==========================================
+@app.route("/api/predict/multiple", methods=["POST"])
+def predict_multiple():
+    """
+    Accepts base64 image data containing one or more handwritten digits.
+    Segments candidate digit regions left-to-right, runs inference on each,
+    and returns bounding boxes, per-digit confidence, warnings, and recognized text string.
+    """
+    data = request.get_json(silent=True)
+    if not data or "image" not in data:
+        return jsonify({
+            "success": False,
+            "status": "invalid_input",
+            "error": "Missing 'image' field in JSON request body.",
+            "recognized_text": "",
+            "detected_digit_count": 0,
+            "per_digit_predictions": []
+        }), 400
+
+    image_data = data["image"]
+    options = data.get("options", {})
+    confidence_threshold = float(options.get("confidence_threshold", 0.75))
+    min_margin = float(options.get("min_margin", 0.15))
+    is_webcam = bool(data.get("is_webcam", False))
+
+    result = classifier.predict_multiple_from_base64(
+        image_data,
+        is_webcam=is_webcam,
+        confidence_threshold=confidence_threshold,
+        min_margin=min_margin
+    )
+
+    status_code = 200 if result["success"] or result.get("status") in ("blank_input", "segmentation_failure") else 400
+    return jsonify(result), status_code
+
+
+# ==========================================
+# 5. Interactive Practice Mode Evaluation
+# ==========================================
+@app.route("/api/practice/evaluate", methods=["POST"])
+def practice_evaluate():
+    """
+    Evaluates a user's practice drawing attempt against a target digit.
+    Applies confidence policy:
+    - correct: predicted == target AND status == 'accepted_prediction'
+    - incorrect: predicted != target AND status == 'accepted_prediction'
+    - uncertain: status == 'uncertain_prediction'
+    - rejected: status == 'rejected_prediction'
+    - blank: is_blank == True
+    """
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, dict):
+        return jsonify({
+            "success": False,
+            "error": "Request body must be valid JSON."
+        }), 400
+
+    if "image" not in data:
+        return jsonify({
+            "success": False,
+            "error": "Missing 'image' field in JSON request body."
+        }), 400
+
+    target = data.get("target_digit")
+    if target is None:
+        return jsonify({
+            "success": False,
+            "error": "Missing 'target_digit' field in JSON request body."
+        }), 400
+
+    try:
+        target = int(target)
+        if not (0 <= target <= 9):
+            return jsonify({
+                "success": False,
+                "error": "target_digit must be an integer between 0 and 9."
+            }), 400
+    except (ValueError, TypeError):
+        return jsonify({
+            "success": False,
+            "error": "target_digit must be an integer between 0 and 9."
+        }), 400
+
+    image_data = data["image"]
+    result = classifier.predict_from_base64(image_data)
+
+    if not result.get("success") or result.get("is_blank"):
+        return jsonify({
+            "success": False,
+            "is_blank": True,
+            "outcome": "blank",
+            "message": "Blank or empty drawing detected. Please draw a digit before submitting.",
+            "target_digit": target,
+            "predicted_digit": None,
+            "status": "blank_input"
+        }), 200
+
+    pred = result["predicted_digit"]
+    status = result["status"]
+    conf = result["confidence"]
+    margin = result.get("margin", 0.0)
+
+    is_correct = (pred == target and status == "accepted_prediction")
+    if is_correct:
+        outcome = "correct"
+        feedback = f"Excellent! The CNN recognized digit {pred} with {conf*100:.1f}% confidence."
+    elif status == "uncertain_prediction":
+        outcome = "uncertain"
+        feedback = f"Borderline / Uncertain: Model predicted digit {pred} ({conf*100:.1f}% confidence), but confidence did not meet the 75% threshold."
+    elif status == "rejected_prediction":
+        outcome = "rejected"
+        feedback = f"Low Confidence / Rejected: Model confidence was low ({conf*100:.1f}%). Try drawing with cleaner, more decisive strokes."
+    else:
+        outcome = "incorrect"
+        feedback = f"Misclassified: Target was digit {target}, but model classified this as digit {pred} ({conf*100:.1f}% confidence)."
+
+    return jsonify({
+        "success": True,
+        "is_blank": False,
+        "outcome": outcome,
+        "is_correct": is_correct,
+        "target_digit": target,
+        "predicted_digit": pred,
+        "confidence": conf,
+        "margin": margin,
+        "status": status,
+        "top_candidates": result.get("top_candidates", []),
+        "probabilities": result.get("probabilities", {}),
+        "processed_image": result.get("processed_image"),
+        "feedback": feedback
+    }), 200
+
+
+# ==========================================
+# 6. Explainability (Grad-CAM) Endpoint
+# ==========================================
+@app.route("/api/explain", methods=["POST"])
+def explain_prediction():
+    """
+    Computes Grad-CAM explainability heatmap for a handwritten digit.
+    Highlights regions in the convolutional feature map influencing the CNN's score.
+    Returns original processed crop, heatmap, and transparent overlay as base64 images.
+    """
+    data = request.get_json(silent=True)
+    if not data or "image" not in data:
+        return jsonify({
+            "success": False,
+            "error": "Missing 'image' field in JSON request body.",
+            "prediction": None,
+            "confidence": 0.0,
+            "layer": None,
+            "original_image": None,
+            "heatmap": None,
+            "overlay": None,
+            "explanation_method": "Grad-CAM"
+        }), 400
+
+    image_data = data["image"]
+    target_digit = data.get("target_digit")
+    if target_digit is not None:
+        try:
+            target_digit = int(target_digit)
+            if target_digit < 0 or target_digit > 9:
+                return jsonify({
+                    "success": False,
+                    "error": "target_digit must be an integer between 0 and 9.",
+                    "prediction": None,
+                    "confidence": 0.0,
+                    "layer": None,
+                    "original_image": None,
+                    "heatmap": None,
+                    "overlay": None,
+                    "explanation_method": "Grad-CAM"
+                }), 400
+        except (ValueError, TypeError):
+            return jsonify({
+                "success": False,
+                "error": "target_digit must be a valid integer between 0 and 9.",
+                "prediction": None,
+                "confidence": 0.0,
+                "layer": None,
+                "original_image": None,
+                "heatmap": None,
+                "overlay": None,
+                "explanation_method": "Grad-CAM"
+            }), 400
+
+    is_webcam = bool(data.get("is_webcam", False))
+
+    result = classifier.explain_from_base64(
+        image_data,
+        target_digit=target_digit,
+        is_webcam=is_webcam
+    )
+
+    if result.get("is_blank"):
+        return jsonify(result), 200
+    elif not result["success"]:
+        return jsonify(result), 400
+
+    return jsonify(result), 200
+
+
+
+# ==========================================
 # 4. Model Info & Metrics Endpoint
 # ==========================================
 @app.route("/api/model-info", methods=["GET"])
@@ -152,93 +358,46 @@ def get_confusion_matrix_image():
 
 
 # ==========================================
-# 5. Gemini AI Assistant Endpoint
+# 5. Gemini AI Assistant & Handwriting Tutor
 # ==========================================
 @app.route("/api/assistant", methods=["POST"])
 def gemini_assistant():
     """
-    Gemini AI Assistant for explaining predictions, providing handwriting improvement tips,
-    and answering architecture / computer vision questions.
+    Intelligent Handwriting Tutor & Gemini AI Assistant.
+    Provides pedagogical stroke advice, explains digit confusions (1 vs 7, 3 vs 8, 4 vs 9),
+    integrates Grad-CAM and CNN confidence context, with resilient offline domain fallback.
     """
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    from tutor import validate_tutor_request, call_gemini_tutor
 
-    data = request.get_json(silent=True) or {}
-    user_prompt = data.get("prompt", "").strip()
-    prediction_context = data.get("context", {})
-
-    if not user_prompt:
+    data = request.get_json(silent=True)
+    if data is None or not isinstance(data, dict):
         return jsonify({
             "success": False,
-            "error": "Please provide a 'prompt' in the request."
+            "error": "Request body must be valid JSON."
         }), 400
 
-    if not api_key:
+    # Validate and sanitize input payload
+    is_valid, err_msg, cleaned = validate_tutor_request(data)
+    if not is_valid:
         return jsonify({
             "success": False,
-            "configured": False,
-            "message": "Gemini API key is not configured in backend/.env. To enable the AI Assistant, add your GEMINI_API_KEY from Google AI Studio (https://aistudio.google.com/)."
-        }), 200
+            "error": err_msg or "Invalid request parameters."
+        }), 400
 
-    try:
-        # Use official Google Gen AI SDK
-        from google import genai
-        from google.genai import types
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
 
-        client = genai.Client(api_key=api_key)
+    # Call Gemini tutor with graceful fallback
+    tutor_res = call_gemini_tutor(
+        api_key=api_key,
+        prompt=cleaned["prompt"],
+        predicted_digit=cleaned["predicted_digit"],
+        comparison_digit=cleaned["comparison_digit"],
+        confidence=cleaned["confidence"],
+        probabilities=cleaned["probabilities"],
+        layer=cleaned["layer"]
+    )
 
-        # Build context-aware prompt
-        system_instruction = (
-            "You are an expert Machine Learning Engineer and Handwriting Recognition Specialist assisting users "
-            "with a Convolutional Neural Network (CNN) trained on the MNIST handwritten digit dataset.\n"
-            "Guidelines:\n"
-            "1. Explain how the CNN processes images (filtering, convolutions, feature maps, edge detection, pooling, classification).\n"
-            "2. When discussing predictions, explain based on observable visual characteristics and the model's output probabilities. "
-            "Clearly clarify that model probabilities reflect statistical correlation from training and do not prove the exact internal reasoning chain.\n"
-            "3. Offer actionable, practical tips to improve handwriting legibility for digits (e.g. distinguishing 1 vs 7, 0 vs 6, 3 vs 8, 4 vs 9).\n"
-            "4. Keep explanations clear, encouraging, educational, and well-structured using markdown."
-        )
-
-        context_str = ""
-        if prediction_context:
-            digit = prediction_context.get("predicted_digit")
-            confidence = prediction_context.get("confidence")
-            probs = prediction_context.get("probabilities", {})
-            sorted_probs = sorted(probs.items(), key=lambda x: x[1], reverse=True)[:3]
-            top_3_str = ", ".join([f"Digit {k}: {v*100:.1f}%" for k, v in sorted_probs])
-            context_str = (
-                f"\n[Current Prediction Context]:\n"
-                f"- Predicted Digit: {digit}\n"
-                f"- Primary Confidence: {confidence*100 if confidence is not None else 0:.1f}%\n"
-                f"- Top Candidate Probabilities: {top_3_str}\n"
-            )
-
-        full_prompt = f"{context_str}\nUser Query: {user_prompt}"
-
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=full_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.7,
-                max_output_tokens=1024,
-            ),
-        )
-
-        reply_text = response.text if response and hasattr(response, "text") else "No response generated."
-
-        return jsonify({
-            "success": True,
-            "configured": True,
-            "reply": reply_text
-        }), 200
-
-    except Exception as e:
-        error_msg = str(e)
-        return jsonify({
-            "success": False,
-            "configured": True,
-            "error": f"Gemini API request failed: {error_msg}"
-        }), 500
+    return jsonify(tutor_res), 200
 
 
 # ==========================================

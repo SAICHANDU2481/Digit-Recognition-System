@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cpu, Activity, CheckCircle2, AlertTriangle, Sparkles, BookOpen, BarChart3, HelpCircle } from 'lucide-react';
+import { Cpu, Activity, CheckCircle2, AlertTriangle, Sparkles, BookOpen, BarChart3, HelpCircle, Pencil } from 'lucide-react';
 
 export default function Navbar({ backendHealth, activeTab, setActiveTab, onOpenAssistant, onOpenHelp }) {
   const isHealthy = backendHealth && backendHealth.status === 'healthy';
@@ -16,12 +16,12 @@ export default function Navbar({ backendHealth, activeTab, setActiveTab, onOpenA
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h1 className="text-lg font-bold text-white tracking-tight">DigitSense CNN</h1>
+                <h1 className="text-lg font-bold text-white tracking-tight">DigitVision AI</h1>
                 <span className="px-2 py-0.5 text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full">
-                  MNIST v2.1
+                  v3.0 Multi-Digit
                 </span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">Real-Time Handwritten Digit Recognition</p>
+              <p className="text-xs text-slate-400 hidden sm:block">Advanced Handwritten Digit Recognition & Explainability</p>
             </div>
           </div>
 
@@ -37,6 +37,18 @@ export default function Navbar({ backendHealth, activeTab, setActiveTab, onOpenA
             >
               <Cpu className="w-3.5 h-3.5" />
               <span>Recognize</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('practice')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                activeTab === 'practice'
+                  ? 'bg-brand-600 text-white shadow-md shadow-brand-600/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>Practice Mode</span>
             </button>
 
             <button

@@ -1,14 +1,28 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Eraser, RotateCcw, Play, Sparkles, Check, Sliders, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Eraser, RotateCcw, Play, Sparkles, Sliders, ToggleLeft, ToggleRight, Hash, Square } from 'lucide-react';
+import BoundingBoxOverlay from './BoundingBoxOverlay.jsx';
 
-export default function CanvasDrawing({ onPredict, isPredicting, autoPredict = false, setAutoPredict }) {
+export default function CanvasDrawing({
+  onPredict,
+  isPredicting,
+  autoPredict = false,
+  setAutoPredict,
+  mode = 'single', // 'single' | 'multi'
+  setMode = null,
+  multiPredictions = null,
+  selectedDigitIndex = null,
+  onSelectDigit = null,
+}) {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
   const [brushSize, setBrushSize] = useState(20);
-  const [canvasInverted, setCanvasInverted] = useState(false); // false = white on black (MNIST native), true = black on white
+  const [canvasInverted, setCanvasInverted] = useState(false); // false = white on black, true = black on white
   const [history, setHistory] = useState([]);
   const debounceTimerRef = useRef(null);
+
+  const canvasWidth = mode === 'multi' ? 440 : 280;
+  const canvasHeight = mode === 'multi' ? 220 : 280;
 
   // Initialize canvas with smooth rendering
   const clearCanvas = useCallback(() => {
@@ -23,7 +37,7 @@ export default function CanvasDrawing({ onPredict, isPredicting, autoPredict = f
 
   useEffect(() => {
     clearCanvas();
-  }, [clearCanvas]);
+  }, [clearCanvas, mode]);
 
   const saveCanvasState = () => {
     const canvas = canvasRef.current;
@@ -113,7 +127,7 @@ export default function CanvasDrawing({ onPredict, isPredicting, autoPredict = f
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dataUrl = canvas.toDataURL('image/png');
-    onPredict(dataUrl, 'canvas');
+    onPredict(dataUrl, 'canvas', mode);
   };
 
   // Keyboard shortcuts
@@ -132,19 +146,49 @@ export default function CanvasDrawing({ onPredict, isPredicting, autoPredict = f
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hasDrawn, history]);
+  }, [hasDrawn, history, mode]);
 
   return (
-    <div className="flex flex-col items-center">
-      {/* Canvas Controls Header */}
-      <div className="w-full flex items-center justify-between mb-3 text-xs text-slate-400">
-        <div className="flex items-center space-x-2">
-          <span>Brush Size:</span>
-          {[14, 22, 30].map((size) => (
+    <div className="flex flex-col items-center w-full">
+      {/* Canvas Top Bar: Mode Selector & Brush Options */}
+      <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3 text-xs text-slate-400">
+        {/* Mode Selector */}
+        {setMode && (
+          <div className="flex items-center space-x-1 bg-slate-900/80 p-0.5 rounded-lg border border-slate-800">
+            <button
+              onClick={() => setMode('single')}
+              className={`flex items-center space-x-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                mode === 'single'
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Square className="w-3 h-3" />
+              <span>Single (280×280)</span>
+            </button>
+
+            <button
+              onClick={() => setMode('multi')}
+              className={`flex items-center space-x-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                mode === 'multi'
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Hash className="w-3 h-3" />
+              <span>Multi-Digit (440×220)</span>
+            </button>
+          </div>
+        )}
+
+        {/* Brush Size Controls */}
+        <div className="flex items-center space-x-1.5">
+          <span className="text-[11px] text-slate-500">Brush:</span>
+          {[14, 20, 28].map((size) => (
             <button
               key={size}
               onClick={() => setBrushSize(size)}
-              className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-all ${
+              className={`w-6 h-6 rounded flex items-center justify-center border transition-all ${
                 brushSize === size
                   ? 'bg-brand-600 text-white border-brand-500 shadow-sm'
                   : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
@@ -153,45 +197,45 @@ export default function CanvasDrawing({ onPredict, isPredicting, autoPredict = f
             >
               <div
                 className="rounded-full bg-current"
-                style={{ width: `${size / 3}px`, height: `${size / 3}px` }}
+                style={{ width: `${size / 3.5}px`, height: `${size / 3.5}px` }}
               />
             </button>
           ))}
         </div>
 
-        {/* Invert & Auto-predict controls */}
-        <div className="flex items-center space-x-3">
+        {/* Invert & Auto-predict */}
+        <div className="flex items-center space-x-2">
           <button
-            onClick={() => {
-              setCanvasInverted(!canvasInverted);
-            }}
-            className="flex items-center space-x-1.5 px-2 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700 border border-slate-700 transition-colors text-slate-300"
+            onClick={() => setCanvasInverted(!canvasInverted)}
+            className="px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700 border border-slate-700 transition-colors text-slate-300 text-[11px]"
             title="Toggle between Black-on-White or White-on-Black drawing"
           >
-            <span>{canvasInverted ? 'Black on White' : 'White on Black'}</span>
+            {canvasInverted ? 'Black/White' : 'White/Black'}
           </button>
 
-          <button
-            onClick={() => setAutoPredict(!autoPredict)}
-            className={`flex items-center space-x-1 px-2 py-1 rounded-md border transition-colors ${
-              autoPredict
-                ? 'bg-brand-600/20 text-brand-300 border-brand-500/40'
-                : 'bg-slate-800/60 text-slate-400 border-slate-700'
-            }`}
-            title="Automatically run prediction 400ms after drawing"
-          >
-            {autoPredict ? <ToggleRight className="w-4 h-4 text-brand-400" /> : <ToggleLeft className="w-4 h-4" />}
-            <span className="hidden sm:inline">Auto-Predict</span>
-          </button>
+          {setAutoPredict && (
+            <button
+              onClick={() => setAutoPredict(!autoPredict)}
+              className={`flex items-center space-x-1 px-2 py-1 rounded border transition-colors text-[11px] ${
+                autoPredict
+                  ? 'bg-brand-600/20 text-brand-300 border-brand-500/40'
+                  : 'bg-slate-800/60 text-slate-400 border-slate-700'
+              }`}
+              title="Automatically run prediction 450ms after drawing"
+            >
+              {autoPredict ? <ToggleRight className="w-3.5 h-3.5 text-brand-400" /> : <ToggleLeft className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">Auto</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Drawing Canvas Frame */}
-      <div className="relative group p-1.5 rounded-2xl bg-gradient-to-b from-slate-700/50 via-slate-800/30 to-slate-900/60 shadow-2xl border border-slate-700/60">
+      {/* Drawing Canvas Frame with Responsive Scaling */}
+      <div className="relative group p-1.5 rounded-2xl bg-gradient-to-b from-slate-700/50 via-slate-800/30 to-slate-900/60 shadow-2xl border border-slate-700/60 max-w-full overflow-hidden">
         <canvas
           ref={canvasRef}
-          width={280}
-          height={280}
+          width={canvasWidth}
+          height={canvasHeight}
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}
@@ -199,28 +243,47 @@ export default function CanvasDrawing({ onPredict, isPredicting, autoPredict = f
           onTouchStart={startDrawing}
           onTouchMove={draw}
           onTouchEnd={stopDrawing}
-          className="digit-canvas rounded-xl shadow-inner bg-black cursor-crosshair border border-slate-800"
-          style={{ width: '280px', height: '280px' }}
+          className="digit-canvas rounded-xl shadow-inner bg-black cursor-crosshair border border-slate-800 block"
+          style={{
+            width: `${canvasWidth}px`,
+            maxWidth: '100%',
+            height: 'auto',
+            aspectRatio: `${canvasWidth} / ${canvasHeight}`
+          }}
         />
 
-        {/* Subtle guide grid lines (visual aid for centering) */}
-        <div className="pointer-events-none absolute inset-2.5 flex items-center justify-center opacity-15">
-          <div className="w-48 h-48 border border-dashed border-indigo-400 rounded-lg flex items-center justify-center">
-            <div className="w-2 h-2 rounded-full bg-indigo-400"></div>
+        {/* Bounding Box Overlay for Multi-Digit Mode */}
+        {mode === 'multi' && multiPredictions && multiPredictions.length > 0 && (
+          <BoundingBoxOverlay
+            sourceDimensions={{ width: canvasWidth, height: canvasHeight }}
+            predictions={multiPredictions}
+            selectedDigitIndex={selectedDigitIndex}
+            onSelectDigit={onSelectDigit}
+          />
+        )}
+
+        {/* Center Guide Grid (in single digit mode) */}
+        {mode === 'single' && (
+          <div className="pointer-events-none absolute inset-2.5 flex items-center justify-center opacity-15">
+            <div className="w-48 h-48 border border-dashed border-indigo-400 rounded-lg flex items-center justify-center">
+              <div className="w-2 h-2 rounded-full bg-indigo-400"></div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Empty canvas hint */}
         {!hasDrawn && (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-slate-500 text-xs select-none">
-            <p className="font-medium text-slate-400">Draw a digit (0-9) here</p>
-            <p className="text-[11px] text-slate-600 mt-1">Mouse, trackpad, or touch</p>
+            <p className="font-medium text-slate-400">
+              {mode === 'multi' ? 'Draw multiple digits (e.g. 5072)' : 'Draw a digit (0-9) here'}
+            </p>
+            <p className="text-[11px] text-slate-600 mt-1">Mouse, trackpad, or stylus</p>
           </div>
         )}
       </div>
 
       {/* Action Buttons */}
-      <div className="w-full max-w-[280px] grid grid-cols-3 gap-2 mt-4">
+      <div className="w-full max-w-[340px] grid grid-cols-3 gap-2 mt-4">
         <button
           onClick={clearCanvas}
           disabled={!hasDrawn && history.length === 0}
@@ -245,14 +308,14 @@ export default function CanvasDrawing({ onPredict, isPredicting, autoPredict = f
           onClick={handlePredict}
           disabled={isPredicting || !hasDrawn}
           className="flex items-center justify-center space-x-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 active:from-brand-700 text-white text-xs font-semibold shadow-md shadow-brand-600/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Predict Digit (Hotkey: Enter)"
+          title="Run DigitVision Inference (Hotkey: Enter)"
         >
           {isPredicting ? (
             <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
             <Play className="w-3.5 h-3.5 fill-current" />
           )}
-          <span>Predict</span>
+          <span>{mode === 'multi' ? 'Segment & Predict' : 'Predict'}</span>
         </button>
       </div>
 

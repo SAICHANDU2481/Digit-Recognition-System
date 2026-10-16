@@ -135,15 +135,28 @@ export default function PredictionDisplay({
             </div>
           </div>
 
-          {/* Ask Gemini quick button */}
-          <button
-            onClick={() => onAskGemini && onAskGemini(prediction)}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-200 text-xs font-semibold transition-all hover:scale-105 active:scale-95"
-            title="Ask Gemini AI to explain this classification or suggest handwriting tips"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span className="hidden sm:inline">Ask AI</span>
-          </button>
+          {/* Action buttons: Explain (Grad-CAM) & Ask Gemini */}
+          <div className="flex items-center space-x-2">
+            {onExplain && (
+              <button
+                onClick={() => onExplain && onExplain()}
+                className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-200 text-xs font-semibold transition-all hover:scale-105 active:scale-95"
+                title="Generate Grad-CAM heatmaps showing which pixels influenced this decision"
+              >
+                <Eye className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">Explain</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => onAskGemini && onAskGemini(prediction)}
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-200 text-xs font-semibold transition-all hover:scale-105 active:scale-95"
+              title="Ask Gemini AI to explain this classification or suggest handwriting tips"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden sm:inline">Ask AI</span>
+            </button>
+          </div>
         </div>
 
         {/* Image Comparison: Original vs Processed 28x28 (MNIST Center-of-Mass) */}

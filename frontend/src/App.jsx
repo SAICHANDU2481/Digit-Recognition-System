@@ -3,16 +3,21 @@ import Navbar from './components/Navbar.jsx';
 import CanvasDrawing from './components/CanvasDrawing.jsx';
 import WebcamCapture from './components/WebcamCapture.jsx';
 import PredictionDisplay from './components/PredictionDisplay.jsx';
+import MultiDigitDisplay from './components/MultiDigitDisplay.jsx';
+import ExplainabilityViewer from './components/ExplainabilityViewer.jsx';
 import PredictionHistory from './components/PredictionHistory.jsx';
 import ModelMetrics from './components/ModelMetrics.jsx';
 import GeminiAssistant from './components/GeminiAssistant.jsx';
 import EducationalResources from './components/EducationalResources.jsx';
+import PracticeMode from './components/PracticeMode.jsx';
 import { getApiUrl } from './config.js';
 import { PenTool, Camera, Sparkles, HelpCircle, X, CheckCircle, Info } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('recognize'); // 'recognize' | 'metrics' | 'resources'
   const [inputMode, setInputMode] = useState('canvas'); // 'canvas' | 'webcam'
+  const [canvasMode, setCanvasMode] = useState('multi'); // 'single' | 'multi'
+  const [selectedDigitIndex, setSelectedDigitIndex] = useState(null);
   const [isPredicting, setIsPredicting] = useState(false);
   const [currentPrediction, setCurrentPrediction] = useState(null);
   const [originalImage, setOriginalImage] = useState(null);
@@ -22,6 +27,11 @@ export default function App() {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [autoPredict, setAutoPredict] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+
+  // Grad-CAM Explainability State
+  const [explanationData, setExplanationData] = useState(null);
+  const [isExplaining, setIsExplaining] = useState(false);
+  const [explainError, setExplainError] = useState(null);
 
   // Poll backend health
   const checkHealth = async () => {
@@ -49,39 +59,75 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Prediction Handler
-  const handlePredict = async (imageDataUrl, source) => {
+  // Prediction Handler (Supports Single & Multi-digit Modes)
+  const handlePredict = async (imageDataUrl, source, modeOverride) => {
     if (!imageDataUrl) return;
 
+    const isMulti = modeOverride ? modeOverride === 'multi' : canvasMode === 'multi';
     setIsPredicting(true);
     setOriginalImage(imageDataUrl);
+    setSelectedDigitIndex(null);
+    setExplanationData(null);
+    setExplainError(null);
 
-    const endpoint = getApiUrl(source === 'webcam' ? '/api/predict/webcam' : '/api/predict');
+    let endpoint = getApiUrl('/api/predict');
+    if (isMulti) {
+      endpoint = getApiUrl('/api/predict/multiple');
+    } else if (source === 'webcam') {
+      endpoint = getApiUrl('/api/predict/webcam');
+    }
 
     try {
+      const payload = isMulti
+        ? { image: imageDataUrl, is_webcam: source === 'webcam', options: { confidence_threshold: 0.75, min_margin: 0.15 } }
+        : { image: imageDataUrl };
+
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageDataUrl })
+        body: JSON.stringify(payload)
       });
 
       const data = await res.json();
       setCurrentPrediction(data);
 
-      if (data.success && data.predicted_digit !== null) {
-        const historyItem = {
-          id: Date.now(),
-          predicted_digit: data.predicted_digit,
-          confidence: data.confidence,
-          probabilities: data.probabilities,
-          originalImage: imageDataUrl,
-          processed_image: data.processed_image,
-          source: source,
-          timestamp: new Date().toLocaleTimeString()
-        };
-        setHistory((prev) => [historyItem, ...prev.slice(0, 19)]);
-      } else if (data.is_blank) {
-        showToast('Blank canvas detected. Please draw a digit.');
+      if (isMulti) {
+        if (data.success && data.detected_digit_count > 0) {
+          const historyItem = {
+            id: Date.now(),
+            predicted_digit: data.recognized_text,
+            isMulti: true,
+            recognized_text: data.recognized_text,
+            confidence: data.per_digit_predictions[0]?.confidence || 0.9,
+            detected_digit_count: data.detected_digit_count,
+            per_digit_predictions: data.per_digit_predictions,
+            originalImage: imageDataUrl,
+            source: source,
+            timestamp: new Date().toLocaleTimeString()
+          };
+          setHistory((prev) => [historyItem, ...prev.slice(0, 19)]);
+        } else if (data.status === 'blank_input') {
+          showToast('Blank canvas detected. Please draw one or more digits.');
+        } else if (data.status === 'segmentation_failure') {
+          showToast('Segmentation could not isolate digit strokes.');
+        }
+      } else {
+        if (data.success && data.predicted_digit !== null) {
+          const historyItem = {
+            id: Date.now(),
+            predicted_digit: data.predicted_digit,
+            isMulti: false,
+            confidence: data.confidence,
+            probabilities: data.probabilities,
+            originalImage: imageDataUrl,
+            processed_image: data.processed_image,
+            source: source,
+            timestamp: new Date().toLocaleTimeString()
+          };
+          setHistory((prev) => [historyItem, ...prev.slice(0, 19)]);
+        } else if (data.is_blank) {
+          showToast('Blank canvas detected. Please draw a digit.');
+        }
       }
     } catch (err) {
       console.error('Prediction request failed:', err);
@@ -96,16 +142,72 @@ export default function App() {
     }
   };
 
+  // Grad-CAM Explainability Handler
+  const handleExplain = async (imageOverride = null, targetDigit = null) => {
+    const targetImage = imageOverride || originalImage;
+    if (!targetImage) {
+      showToast('Draw or capture a digit first before requesting an explanation.');
+      return;
+    }
+
+    setIsExplaining(true);
+    setExplainError(null);
+
+    try {
+      const payload = {
+        image: targetImage,
+        is_webcam: inputMode === 'webcam',
+      };
+      if (targetDigit !== null && targetDigit !== undefined) {
+        payload.target_digit = targetDigit;
+      }
+
+      const res = await fetch(getApiUrl('/api/explain'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setExplanationData(data);
+      } else if (data.is_blank) {
+        setExplanationData(data);
+        showToast('Blank drawing: cannot compute Grad-CAM for empty canvas.');
+      } else {
+        setExplainError(data.error || 'Failed to generate Grad-CAM explanation.');
+      }
+    } catch (err) {
+      console.error('Explain request failed:', err);
+      setExplainError('Unable to connect to /api/explain. Ensure Flask server is running on port 5000.');
+    } finally {
+      setIsExplaining(false);
+    }
+  };
+
   const handleSelectHistoryItem = (item) => {
     setOriginalImage(item.originalImage);
-    setCurrentPrediction({
-      success: true,
-      predicted_digit: item.predicted_digit,
-      confidence: item.confidence,
-      probabilities: item.probabilities,
-      processed_image: item.processed_image,
-      duration_ms: item.duration_ms || 10.0
-    });
+    if (item.isMulti) {
+      setCanvasMode('multi');
+      setCurrentPrediction({
+        success: true,
+        status: 'accepted_prediction',
+        recognized_text: item.recognized_text,
+        detected_digit_count: item.detected_digit_count,
+        per_digit_predictions: item.per_digit_predictions,
+        duration_ms: 12.0
+      });
+    } else {
+      setCanvasMode('single');
+      setCurrentPrediction({
+        success: true,
+        predicted_digit: item.predicted_digit,
+        confidence: item.confidence,
+        probabilities: item.probabilities,
+        processed_image: item.processed_image,
+        duration_ms: item.duration_ms || 10.0
+      });
+    }
     setActiveTab('recognize');
   };
 
@@ -117,6 +219,8 @@ export default function App() {
   const handleAskGemini = (predictionContext) => {
     setIsAssistantOpen(true);
   };
+
+  const isMultiPrediction = currentPrediction && 'per_digit_predictions' in currentPrediction;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -174,34 +278,65 @@ export default function App() {
                   </div>
 
                   <span className="text-[11px] font-mono text-slate-500 uppercase tracking-wider">
-                    {inputMode}
+                    {inputMode} • {canvasMode}
                   </span>
                 </div>
 
                 {/* Active Input Component */}
                 {inputMode === 'canvas' ? (
                   <CanvasDrawing
-                    onPredict={(dataUrl) => handlePredict(dataUrl, 'canvas')}
+                    onPredict={(dataUrl, src, mode) => handlePredict(dataUrl, src, mode)}
                     isPredicting={isPredicting}
                     autoPredict={autoPredict}
                     setAutoPredict={setAutoPredict}
+                    mode={canvasMode}
+                    setMode={setCanvasMode}
+                    multiPredictions={currentPrediction?.per_digit_predictions}
+                    selectedDigitIndex={selectedDigitIndex}
+                    onSelectDigit={setSelectedDigitIndex}
                   />
                 ) : (
                   <WebcamCapture
-                    onPredict={(dataUrl) => handlePredict(dataUrl, 'webcam')}
+                    onPredict={(dataUrl) => handlePredict(dataUrl, 'webcam', canvasMode)}
                     isPredicting={isPredicting}
                   />
                 )}
               </div>
 
-              {/* Right Column: Prediction Results & Probabilities */}
-              <div className="lg:col-span-7">
-                <PredictionDisplay
-                  prediction={currentPrediction}
-                  originalImage={originalImage}
-                  onAskGemini={handleAskGemini}
-                  isPredicting={isPredicting}
-                />
+              {/* Right Column: Prediction Results, Multi-Digit Breakdown & Grad-CAM Explainability */}
+              <div className="lg:col-span-7 space-y-5">
+                {isMultiPrediction || canvasMode === 'multi' ? (
+                  <MultiDigitDisplay
+                    prediction={currentPrediction}
+                    selectedDigitIndex={selectedDigitIndex}
+                    onSelectDigit={setSelectedDigitIndex}
+                    onAskGemini={handleAskGemini}
+                    onExplainCrop={(cropB64, digit) => handleExplain(cropB64, digit)}
+                  />
+                ) : (
+                  <PredictionDisplay
+                    prediction={currentPrediction}
+                    originalImage={originalImage}
+                    onAskGemini={handleAskGemini}
+                    onExplain={() => handleExplain()}
+                    isPredicting={isPredicting}
+                  />
+                )}
+
+                {/* Grad-CAM Explainability Heatmap Panel */}
+                {(explanationData || isExplaining || explainError) && (
+                  <ExplainabilityViewer
+                    explanation={explanationData}
+                    isLoading={isExplaining}
+                    error={explainError}
+                    onClose={() => {
+                      setExplanationData(null);
+                      setExplainError(null);
+                    }}
+                    onExplainDigit={(target) => handleExplain(null, target)}
+                    onAskTutor={() => setIsAssistantOpen(true)}
+                  />
+                )}
               </div>
             </div>
 
@@ -214,18 +349,31 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 2: Model Performance & Metrics */}
+        {/* Tab 2: Interactive Practice Mode */}
+        {activeTab === 'practice' && (
+          <PracticeMode
+            onOpenTutor={(tutorContext) => {
+              if (tutorContext) {
+                setCurrentPrediction(tutorContext);
+              }
+              setIsAssistantOpen(true);
+            }}
+          />
+        )}
+
+        {/* Tab 3: Model Performance & Metrics */}
         {activeTab === 'metrics' && <ModelMetrics />}
 
-        {/* Tab 3: Educational Resources & Public References */}
+        {/* Tab 4: Educational Resources & Public References */}
         {activeTab === 'resources' && <EducationalResources />}
       </main>
 
-      {/* Gemini AI Assistant Drawer */}
+      {/* Gemini AI Assistant & Handwriting Tutor Drawer */}
       <GeminiAssistant
         isOpen={isAssistantOpen}
         onClose={() => setIsAssistantOpen(false)}
         activePrediction={currentPrediction}
+        explanationData={explanationData}
       />
 
       {/* Help & Architecture Information Modal */}
@@ -241,25 +389,26 @@ export default function App() {
 
             <h3 className="text-lg font-bold text-white mb-2 flex items-center space-x-2">
               <span className="w-2.5 h-2.5 rounded-full bg-brand-500" />
-              <span>Real-Time Handwritten Digit Recognition</span>
+              <span>DigitVision AI — Multi-Digit Architecture</span>
             </h3>
 
             <p className="text-xs text-slate-300 leading-relaxed mb-4">
-              This system uses a Deep Convolutional Neural Network (CNN) trained on the MNIST handwritten digit benchmark (60,000 training images, 10,000 test images) to classify digits 0 through 9 in real time with high accuracy.
+              DigitVision AI features an OpenCV segmentation pipeline combined with a Deep Convolutional Neural Network trained on MNIST (60,000 training, 10,000 test) capable of isolating and classifying single digits and multi-digit sequences in real time.
             </p>
 
             <div className="space-y-3 text-xs text-slate-400 mb-6">
               <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800">
-                <strong className="text-slate-200 block mb-1">Preprocessing Pipeline (LeCun Protocol):</strong>
-                1. Grayscale & polarity normalization (digit is always bright on dark background).<br />
-                2. Non-zero bounding box cropping preserving aspect ratio.<br />
-                3. Scaling into a 20×20 box placed inside 28×28.<br />
-                4. Shifting center of mass of pixel intensities to center (13.5, 13.5).
+                <strong className="text-slate-200 block mb-1">Multi-Digit Segmentation Pipeline:</strong>
+                1. Adaptive binarization & morphological closing.<br />
+                2. Connected-component analysis & stroke grouping.<br />
+                3. Touching-digit separation fallback via vertical projection profile valley detection.<br />
+                4. Left-to-right sorting and individual LeCun 28×28 moment-centering.<br />
+                5. Confidence-aware rejection policy with runner-up margin evaluation.
               </div>
 
               <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800">
                 <strong className="text-slate-200 block mb-1">Gemini AI Assistant Integration:</strong>
-                Powered by the official Google Gen AI SDK. Ask questions regarding handwriting tips, convolutional features, or probability distributions without exposing keys to the frontend.
+                Official Google Gen AI SDK integration for handwriting legibility tips and convolutional neural network explanations.
               </div>
             </div>
 
@@ -275,8 +424,9 @@ export default function App() {
 
       {/* Footer */}
       <footer className="border-t border-slate-800/80 py-4 text-center text-xs text-slate-500">
-        Handwritten Digit Recognition System &copy; {new Date().getFullYear()} &bull; Built with TensorFlow/Keras, OpenCV, Flask & React Vite
+        DigitVision AI &copy; {new Date().getFullYear()} &bull; Built with TensorFlow/Keras CNN, OpenCV, Flask & React Vite
       </footer>
     </div>
   );
 }
+

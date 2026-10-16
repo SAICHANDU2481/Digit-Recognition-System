@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from './components/Navbar.jsx';
 import CanvasDrawing from './components/CanvasDrawing.jsx';
 import WebcamCapture from './components/WebcamCapture.jsx';
@@ -216,13 +216,13 @@ export default function App() {
     showToast('Prediction history cleared.');
   };
 
-  const handleClearCanvas = () => {
+  const handleClearCanvas = useCallback(() => {
     setCurrentPrediction(null);
     setSelectedDigitIndex(null);
     setOriginalImage(null);
     setExplanationData(null);
     setExplainError(null);
-  };
+  }, []);
 
   const handleAskGemini = (predictionContext) => {
     setIsAssistantOpen(true);

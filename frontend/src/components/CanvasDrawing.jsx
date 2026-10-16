@@ -25,8 +25,8 @@ export default function CanvasDrawing({
   const canvasWidth = mode === 'multi' ? 440 : 280;
   const canvasHeight = mode === 'multi' ? 220 : 280;
 
-  // Initialize canvas with smooth rendering
-  const clearCanvas = useCallback(() => {
+  // Initialize canvas background pixels (only on mount, dimension/mode change, or color inversion)
+  const resetCanvasPixels = useCallback(() => {
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext('2d');
@@ -35,14 +35,22 @@ export default function CanvasDrawing({
     }
     setHasDrawn(false);
     setHistory([]);
+  }, [canvasInverted]);
+
+  // Clear canvas pixels and reset prediction state
+  const clearCanvas = useCallback(() => {
+    resetCanvasPixels();
     if (onClear) {
       onClear();
     }
-  }, [canvasInverted, onClear]);
+  }, [resetCanvasPixels, onClear]);
+
+  // Alias handleUserClear for consistency
+  const handleUserClear = clearCanvas;
 
   useEffect(() => {
-    clearCanvas();
-  }, [clearCanvas, mode]);
+    resetCanvasPixels();
+  }, [mode, canvasInverted, resetCanvasPixels]);
 
   const saveCanvasState = () => {
     const canvas = canvasRef.current;
@@ -63,7 +71,7 @@ export default function CanvasDrawing({
     if (previousState) {
       ctx.putImageData(previousState, 0, 0);
     } else {
-      clearCanvas();
+      resetCanvasPixels();
     }
   };
 

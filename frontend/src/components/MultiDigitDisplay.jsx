@@ -170,7 +170,7 @@ export default function MultiDigitDisplay({
             <span className="text-[11px] text-slate-500">Click a card to inspect</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
             {per_digit_predictions.map((digitItem, idx) => {
               const isSelected = selectedDigitIndex === idx;
               const isAccepted = digitItem.status === 'accepted';
@@ -192,55 +192,41 @@ export default function MultiDigitDisplay({
                 <div
                   key={idx}
                   onClick={() => onSelectDigit && onSelectDigit(idx)}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer ${cardStatusColor} ${
+                  className={`p-3.5 rounded-xl border transition-all cursor-pointer overflow-hidden ${cardStatusColor} ${
                     isSelected ? 'ring-2 ring-brand-400 scale-[1.02] shadow-lg' : 'hover:border-slate-600'
                   }`}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center space-x-2.5">
+                  {/* Top Row: Digit Info + 28x28 Crop */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center space-x-2.5 min-w-0">
                       {/* Big Digit */}
-                      <span className="text-3xl font-mono font-black text-white">
+                      <span className="text-3xl font-mono font-black text-white shrink-0">
                         {digitItem.status === 'rejected' ? '?' : digitItem.predicted_digit}
                       </span>
 
-                      <div>
+                      <div className="min-w-0">
                         <div className="flex items-center space-x-1">
-                          <span className="text-[10px] font-mono text-slate-400">Pos #{idx + 1}</span>
-                          <span className={`px-1.5 py-0.2 rounded text-[9px] uppercase font-bold border ${digitBadge}`}>
+                          <span className="text-[10px] font-mono text-slate-400 shrink-0">Pos #{idx + 1}</span>
+                          <span className={`px-1.5 py-0.2 rounded text-[9px] uppercase font-bold border truncate ${digitBadge}`}>
                             {digitItem.status}
                           </span>
                         </div>
-                        <div className="text-xs font-mono font-semibold text-slate-200 mt-0.5">
+                        <div className="text-xs font-mono font-semibold text-slate-200 mt-0.5 truncate">
                           {(digitItem.confidence * 100).toFixed(1)}% conf
                         </div>
                       </div>
                     </div>
 
-                    {/* Preprocessed 28x28 Thumbnail & Explain Action */}
-                    <div className="flex flex-col items-end space-y-1">
-                      {showCrops && digitItem.preprocessed_crop && (
-                        <div className="w-10 h-10 rounded-lg bg-black border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner">
-                          <img
-                            src={digitItem.preprocessed_crop}
-                            alt={`Digit ${digitItem.predicted_digit} 28x28 crop`}
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
-                      )}
-                      {onExplainCrop && digitItem.preprocessed_crop && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onExplainCrop(digitItem.preprocessed_crop, digitItem.predicted_digit);
-                          }}
-                          className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[9px] font-mono transition-colors"
-                          title="Generate Grad-CAM heatmap for this segmented digit"
-                        >
-                          <Eye className="w-2.5 h-2.5" />
-                          <span>Explain</span>
-                        </button>
-                      )}
-                    </div>
+                    {/* Preprocessed 28x28 Thumbnail */}
+                    {showCrops && digitItem.preprocessed_crop && (
+                      <div className="w-9 h-9 rounded-lg bg-black border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner shrink-0">
+                        <img
+                          src={digitItem.preprocessed_crop}
+                          alt={`Digit ${digitItem.predicted_digit} 28x28 crop`}
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Confidence Bar */}
@@ -282,6 +268,21 @@ export default function MultiDigitDisplay({
                     <div className="mt-1 text-[9px] font-mono text-slate-500">
                       Box: ({digitItem.bounding_box.x}, {digitItem.bounding_box.y}, {digitItem.bounding_box.w}×{digitItem.bounding_box.h})
                     </div>
+                  )}
+
+                  {/* Dedicated Explain Action */}
+                  {onExplainCrop && digitItem.preprocessed_crop && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onExplainCrop(digitItem.preprocessed_crop, digitItem.predicted_digit);
+                      }}
+                      className="w-full mt-2.5 flex items-center justify-center space-x-1.5 py-1 px-2 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/25 active:bg-indigo-500/35 text-indigo-300 border border-indigo-500/30 text-[10px] font-mono font-medium transition-all shadow-sm"
+                      title="Generate Grad-CAM heatmap for this segmented digit"
+                    >
+                      <Eye className="w-3 h-3 text-indigo-400" />
+                      <span>Explain (Grad-CAM)</span>
+                    </button>
                   )}
                 </div>
               );

@@ -1,18 +1,40 @@
 /**
  * Application & API Configuration
  *
- * In production (e.g., hosted on Vercel), set VITE_API_BASE_URL in your Vercel
- * project settings to your backend deployment URL (e.g., https://your-backend.onrender.com).
- *
- * In local development, if VITE_API_BASE_URL is not set, API requests default to relative paths
- * (e.g., /api/...), which Vite proxies to http://localhost:5000 via vite.config.js.
+ * Dynamically resolves the backend API URL:
+ * 1. Checks user-configured override in localStorage ('digitvision_api_url')
+ * 2. Checks build-time environment variable VITE_API_BASE_URL (configured on Vercel)
+ * 3. Falls back to relative paths for local development (proxied by Vite)
  */
 
-const rawBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+export const getApiBaseUrl = () => {
+  let raw = '';
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const stored = window.localStorage.getItem('digitvision_api_url');
+    if (stored && stored.trim()) {
+      raw = stored.trim();
+    }
+  }
 
-// Normalize: If user provides "https://host.com/api", strip trailing "/api"
-// so that calling getApiUrl('/api/health') or getApiUrl('/health') yields consistent URLs.
-export const API_BASE_URL = rawBase.endsWith('/api') ? rawBase.slice(0, -4) : rawBase;
+  if (!raw) {
+    raw = (import.meta.env.VITE_API_BASE_URL || '').trim();
+  }
+
+  raw = raw.replace(/\/+$/, '');
+  return raw.endsWith('/api') ? raw.slice(0, -4) : raw;
+};
+
+export const setCustomApiUrl = (url) => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    if (url && url.trim()) {
+      window.localStorage.setItem('digitvision_api_url', url.trim());
+    } else {
+      window.localStorage.removeItem('digitvision_api_url');
+    }
+  }
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 /**
  * Helper to construct an absolute or relative endpoint URL.
@@ -22,8 +44,9 @@ export const API_BASE_URL = rawBase.endsWith('/api') ? rawBase.slice(0, -4) : ra
  */
 export const getApiUrl = (endpoint) => {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  if (!API_BASE_URL) {
+  const base = getApiBaseUrl();
+  if (!base) {
     return cleanEndpoint;
   }
-  return `${API_BASE_URL}${cleanEndpoint}`;
+  return `${base}${cleanEndpoint}`;
 };

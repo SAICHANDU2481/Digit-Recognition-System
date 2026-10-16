@@ -7,6 +7,7 @@ export default function MultiDigitDisplay({
   onSelectDigit,
   onAskGemini,
   onExplainCrop,
+  onOpenBackendConfig,
 }) {
   const [showCrops, setShowCrops] = useState(true);
 
@@ -156,9 +157,29 @@ export default function MultiDigitDisplay({
 
       {/* Error message */}
       {error && (
-        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center space-x-2">
-          <XCircle className="w-4 h-4 shrink-0 text-rose-400" />
-          <span>{error}</span>
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 space-y-2.5">
+          <div className="flex items-start space-x-2.5">
+            <XCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+            <span className="leading-snug">{error}</span>
+          </div>
+          {onOpenBackendConfig && (
+            <div className="pt-2 border-t border-rose-500/20 flex flex-wrap items-center gap-2">
+              <button
+                onClick={onOpenBackendConfig}
+                className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 font-mono text-[11px] transition-colors"
+              >
+                ⚙️ Configure Backend URL
+              </button>
+              <a
+                href="https://render.com/deploy?repo=https://github.com/SAICHANDU2481/Digit-Recognition-System"
+                target="_blank"
+                rel="noreferrer"
+                className="px-2.5 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-500/40 font-mono text-[11px] transition-colors"
+              >
+                🚀 Deploy Backend on Render
+              </a>
+            </div>
+          )}
         </div>
       )}
 

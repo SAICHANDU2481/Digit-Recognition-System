@@ -6,7 +6,8 @@ export default function PredictionDisplay({
   prediction,
   originalImage,
   onAskGemini,
-  isPredicting
+  isPredicting,
+  onOpenBackendConfig,
 }) {
   // Fire subtle confetti on very high confidence prediction
   useEffect(() => {
@@ -64,14 +65,32 @@ export default function PredictionDisplay({
 
   if (!prediction.success) {
     return (
-      <div className="glass-panel rounded-2xl p-6 flex flex-col items-center justify-center min-h-[360px] text-center border-rose-500/20">
-        <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-3">
+      <div className="glass-panel rounded-2xl p-6 flex flex-col items-center justify-center min-h-[360px] text-center border-rose-500/20 space-y-3">
+        <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
           <AlertTriangle className="w-7 h-7" />
         </div>
         <h3 className="text-sm font-semibold text-rose-300">Prediction Error</h3>
-        <p className="text-xs text-slate-400 max-w-xs mt-1">
+        <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
           {prediction.error || "Could not process image."}
         </p>
+        {onOpenBackendConfig && (
+          <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
+            <button
+              onClick={onOpenBackendConfig}
+              className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 font-mono text-xs transition-colors"
+            >
+              ⚙️ Configure Backend URL
+            </button>
+            <a
+              href="https://render.com/deploy?repo=https://github.com/SAICHANDU2481/Digit-Recognition-System"
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-500/40 font-mono text-xs transition-colors"
+            >
+              🚀 Deploy Backend on Render
+            </a>
+          </div>
+        )}
       </div>
     );
   }

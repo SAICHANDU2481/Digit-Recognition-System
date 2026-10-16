@@ -10,6 +10,7 @@ import ModelMetrics from './components/ModelMetrics.jsx';
 import GeminiAssistant from './components/GeminiAssistant.jsx';
 import EducationalResources from './components/EducationalResources.jsx';
 import PracticeMode from './components/PracticeMode.jsx';
+import BackendConfigModal from './components/BackendConfigModal.jsx';
 import { getApiUrl } from './config.js';
 import { PenTool, Camera, Sparkles, HelpCircle, X, CheckCircle, Info } from 'lucide-react';
 
@@ -25,6 +26,7 @@ export default function App() {
   const [backendHealth, setBackendHealth] = useState(null);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isBackendConfigOpen, setIsBackendConfigOpen] = useState(false);
   const [autoPredict, setAutoPredict] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
@@ -239,6 +241,7 @@ export default function App() {
         setActiveTab={setActiveTab}
         onOpenAssistant={() => setIsAssistantOpen(true)}
         onOpenHelp={() => setIsHelpOpen(true)}
+        onOpenBackendConfig={() => setIsBackendConfigOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -324,6 +327,7 @@ export default function App() {
                     onSelectDigit={setSelectedDigitIndex}
                     onAskGemini={handleAskGemini}
                     onExplainCrop={(cropB64, digit) => handleExplain(cropB64, digit)}
+                    onOpenBackendConfig={() => setIsBackendConfigOpen(true)}
                   />
                 ) : (
                   <PredictionDisplay
@@ -332,6 +336,7 @@ export default function App() {
                     onAskGemini={handleAskGemini}
                     onExplain={() => handleExplain()}
                     isPredicting={isPredicting}
+                    onOpenBackendConfig={() => setIsBackendConfigOpen(true)}
                   />
                 )}
 
@@ -433,6 +438,17 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Backend API Configuration Modal */}
+      <BackendConfigModal
+        isOpen={isBackendConfigOpen}
+        onClose={() => setIsBackendConfigOpen(false)}
+        onConnected={(health) => {
+          setBackendHealth(health);
+          setIsBackendConfigOpen(false);
+          showToast('Backend connected successfully!');
+        }}
+      />
 
       {/* Footer */}
       <footer className="border-t border-slate-800/80 py-4 text-center text-xs text-slate-500">

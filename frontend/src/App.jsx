@@ -216,6 +216,14 @@ export default function App() {
     showToast('Prediction history cleared.');
   };
 
+  const handleClearCanvas = () => {
+    setCurrentPrediction(null);
+    setSelectedDigitIndex(null);
+    setOriginalImage(null);
+    setExplanationData(null);
+    setExplainError(null);
+  };
+
   const handleAskGemini = (predictionContext) => {
     setIsAssistantOpen(true);
   };
@@ -286,11 +294,15 @@ export default function App() {
                 {inputMode === 'canvas' ? (
                   <CanvasDrawing
                     onPredict={(dataUrl, src, mode) => handlePredict(dataUrl, src, mode)}
+                    onClear={handleClearCanvas}
                     isPredicting={isPredicting}
                     autoPredict={autoPredict}
                     setAutoPredict={setAutoPredict}
                     mode={canvasMode}
-                    setMode={setCanvasMode}
+                    setMode={(newMode) => {
+                      setCanvasMode(newMode);
+                      handleClearCanvas();
+                    }}
                     multiPredictions={currentPrediction?.per_digit_predictions}
                     selectedDigitIndex={selectedDigitIndex}
                     onSelectDigit={setSelectedDigitIndex}

@@ -4,6 +4,7 @@ import BoundingBoxOverlay from './BoundingBoxOverlay.jsx';
 
 export default function CanvasDrawing({
   onPredict,
+  onClear = null,
   isPredicting,
   autoPredict = false,
   setAutoPredict,
@@ -27,13 +28,17 @@ export default function CanvasDrawing({
   // Initialize canvas with smooth rendering
   const clearCanvas = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = canvasInverted ? '#ffffff' : '#000000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = canvasInverted ? '#ffffff' : '#000000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
     setHasDrawn(false);
     setHistory([]);
-  }, [canvasInverted]);
+    if (onClear) {
+      onClear();
+    }
+  }, [canvasInverted, onClear]);
 
   useEffect(() => {
     clearCanvas();
@@ -79,6 +84,9 @@ export default function CanvasDrawing({
 
   const startDrawing = (e) => {
     e.preventDefault();
+    if (multiPredictions && multiPredictions.length > 0 && onClear) {
+      onClear();
+    }
     saveCanvasState();
     const { x, y } = getCoordinates(e);
     const canvas = canvasRef.current;
@@ -286,7 +294,7 @@ export default function CanvasDrawing({
       <div className="w-full max-w-[340px] grid grid-cols-3 gap-2 mt-4">
         <button
           onClick={clearCanvas}
-          disabled={!hasDrawn && history.length === 0}
+          disabled={!hasDrawn && history.length === 0 && (!multiPredictions || multiPredictions.length === 0)}
           className="flex items-center justify-center space-x-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700/80 active:bg-slate-900 text-slate-300 text-xs font-medium border border-slate-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           title="Clear Canvas (Hotkey: C)"
         >

@@ -1,0 +1,24 @@
+# Machine Learning & Deep Learning
+tensorflow>=2.16.0,<2.22.0
+keras>=3.0.0
+
+# Backend Web Framework & Production WSGI Server
+flask>=3.0.0,<4.0.0
+flask-cors>=4.0.0
+gunicorn>=21.2.0
+
+# Computer Vision & Image Processing (Headless for cloud containers)
+opencv-python-headless>=4.8.0
+pillow>=10.0.0
+numpy>=1.26.0
+
+# Model Evaluation & Metrics
+scikit-learn>=1.4.0
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+# Google Gemini AI & External Integration
+google-genai>=0.1.0
+python-dotenv>=1.0.0
+beautifulsoup4>=4.12.0
+requests>=2.31.0
